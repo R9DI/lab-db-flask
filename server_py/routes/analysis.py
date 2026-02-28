@@ -1,13 +1,12 @@
 """
-/api/analysis — exact port of server/routes/analysis.js
-Data quality analysis endpoint.
+/api/analysis — Flask version. Data quality analysis endpoint.
 """
 import re
 import sqlite3
-from fastapi import APIRouter, Depends
+from flask import Blueprint, jsonify
 from ..database import get_db, dict_rows
 
-router = APIRouter(prefix="/api/analysis", tags=["analysis"])
+bp = Blueprint("analysis", __name__, url_prefix="/api/analysis")
 
 PARTICLES = [
     "에서","으로","이나","이랑","에게","한테","까지","부터",
@@ -26,8 +25,10 @@ def _normalize_item(text):
     return s
 
 
-@router.get("/")
-def analysis(conn: sqlite3.Connection = Depends(get_db)):
+@bp.route("/", methods=["GET"])
+def analysis():
+    conn = get_db()
+
     # 1. Split Table 작성 불량 (0~1 row)
     split_poor = dict_rows(conn.execute("""
         SELECT e.iacpj_nm, e.plan_id, e.eval_item, e.eval_process, e.lot_code,
@@ -53,16 +54,16 @@ def analysis(conn: sqlite3.Connection = Depends(get_db)):
         eval_groups.setdefault(key, []).append(exp)
 
     dup_eval_item = []
-    for g in eval_groups.values():
-        if len(g) > 1:
-            unique_items = list(dict.fromkeys(i["eval_item"] for i in g))
+    for g_list in eval_groups.values():
+        if len(g_list) > 1:
+            unique_items = list(dict.fromkeys(i["eval_item"] for i in g_list))
             dup_eval_item.append({
-                "iacpj_nm": g[0]["iacpj_nm"],
+                "iacpj_nm": g_list[0]["iacpj_nm"],
                 "eval_item": " / ".join(unique_items),
-                "eval_process": g[0]["eval_process"],
-                "dup_count": len(g),
-                "plan_ids": ", ".join(i["plan_id"] or "" for i in g),
-                "lot_codes": ", ".join(i.get("lot_code") or "-" for i in g),
+                "eval_process": g_list[0]["eval_process"],
+                "dup_count": len(g_list),
+                "plan_ids": ", ".join(i["plan_id"] or "" for i in g_list),
+                "lot_codes": ", ".join(i.get("lot_code") or "-" for i in g_list),
             })
     dup_eval_item.sort(key=lambda x: x["iacpj_nm"])
 
@@ -163,7 +164,7 @@ def analysis(conn: sqlite3.Connection = Depends(get_db)):
             "lot_missing": count_by(lot_missing, "iacpj_nm", nm),
         })
 
-    return {
+    return jsonify({
         "summary": summary,
         "projectSummary": project_summary,
         "issues": {
@@ -174,4 +175,4 @@ def analysis(conn: sqlite3.Connection = Depends(get_db)):
             "fieldMissing": field_missing,
             "lotMissing": lot_missing,
         },
-    }
+    })

@@ -1,12 +1,11 @@
 """
-/api/projects — exact port of server/routes/projects.js
+/api/projects — Flask version
 """
 import sqlite3
-from fastapi import APIRouter, Depends, HTTPException
-from fastapi.responses import JSONResponse
+from flask import Blueprint, jsonify, request, abort
 from ..database import get_db, dict_row, dict_rows
 
-router = APIRouter(prefix="/api/projects", tags=["projects"])
+bp = Blueprint("projects", __name__, url_prefix="/api/projects")
 
 PROJECT_COLS = [
     "iacpj_nm", "iacpj_tgt_n", "iacpj_level", "iacpj_tech_n",
@@ -17,8 +16,9 @@ PROJECT_COLS = [
 ]
 
 
-@router.get("/")
-def list_projects(conn: sqlite3.Connection = Depends(get_db)):
+@bp.route("/", methods=["GET"])
+def list_projects():
+    conn = get_db()
     rows = conn.execute("""
         SELECT p.*,
           COALESCE(e.experiment_count, 0) AS experiment_count,
@@ -41,27 +41,30 @@ def list_projects(conn: sqlite3.Connection = Depends(get_db)):
           GROUP BY ex.iacpj_nm
         ) s ON p.iacpj_nm = s.iacpj_nm
     """).fetchall()
-    return dict_rows(rows)
+    return jsonify(dict_rows(rows))
 
 
-@router.get("/{project_id}")
-def get_project(project_id: int, conn: sqlite3.Connection = Depends(get_db)):
+@bp.route("/<int:project_id>", methods=["GET"])
+def get_project(project_id):
+    conn = get_db()
     project = conn.execute("SELECT * FROM projects WHERE id = ?", (project_id,)).fetchone()
     if not project:
-        raise HTTPException(status_code=404, detail="Project not found")
+        return jsonify({"detail": "Project not found"}), 404
     experiments = conn.execute(
         "SELECT * FROM experiments WHERE iacpj_nm = ?", (project["iacpj_nm"],)
     ).fetchall()
     result = dict_row(project)
     result["experiments"] = dict_rows(experiments)
-    return result
+    return jsonify(result)
 
 
-@router.post("/", status_code=201)
-def create_project(body: dict, conn: sqlite3.Connection = Depends(get_db)):
+@bp.route("/", methods=["POST"])
+def create_project():
+    conn = get_db()
+    body = request.get_json(force=True)
     iacpj_nm = (body.get("iacpj_nm") or "").strip()
     if not iacpj_nm:
-        raise HTTPException(status_code=400, detail="iacpj_nm은 필수입니다.")
+        return jsonify({"detail": "iacpj_nm은 필수입니다."}), 400
 
     params = {col: (body.get(col) or "").strip() or None for col in PROJECT_COLS}
     params["iacpj_nm"] = iacpj_nm
@@ -77,18 +80,19 @@ def create_project(body: dict, conn: sqlite3.Connection = Depends(get_db)):
         created = conn.execute(
             "SELECT * FROM projects WHERE id = ?", (cursor.lastrowid,)
         ).fetchone()
-        return dict_row(created)
+        return jsonify(dict_row(created)), 201
     except sqlite3.IntegrityError as e:
         if "UNIQUE" in str(e):
-            raise HTTPException(status_code=409, detail="이미 동일한 과제명이 존재합니다.")
-        raise HTTPException(status_code=500, detail="과제 생성 중 오류 발생")
+            return jsonify({"detail": "이미 동일한 과제명이 존재합니다."}), 409
+        return jsonify({"detail": "과제 생성 중 오류 발생"}), 500
 
 
-@router.delete("/{project_id}")
-def delete_project(project_id: int, conn: sqlite3.Connection = Depends(get_db)):
+@bp.route("/<int:project_id>", methods=["DELETE"])
+def delete_project(project_id):
+    conn = get_db()
     project = conn.execute("SELECT * FROM projects WHERE id = ?", (project_id,)).fetchone()
     if not project:
-        raise HTTPException(status_code=404, detail="Project not found")
+        return jsonify({"detail": "Project not found"}), 404
 
     try:
         experiments = conn.execute(
@@ -101,14 +105,14 @@ def delete_project(project_id: int, conn: sqlite3.Connection = Depends(get_db)):
         )
         conn.execute("DELETE FROM projects WHERE id = ?", (project_id,))
         conn.commit()
-        return {
+        return jsonify({
             "message": "과제 삭제 완료",
             "deleted": {
                 "project": project["iacpj_nm"],
                 "experiments": exp_result.rowcount,
                 "splits": len(experiments),
             },
-        }
+        })
     except Exception as e:
         conn.rollback()
-        raise HTTPException(status_code=500, detail="과제 삭제 중 오류 발생")
+        return jsonify({"detail": "과제 삭제 중 오류 발생"}), 500

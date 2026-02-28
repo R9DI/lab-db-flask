@@ -1,13 +1,13 @@
 """
-/api/upload — CSV upload + DB stats + DB clear.
+/api/upload — Flask version. CSV upload + DB stats + DB clear.
 """
 import csv
 import io
 import sqlite3
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form
+from flask import Blueprint, jsonify, request
 from ..database import get_db
 
-router = APIRouter(prefix="/api/upload", tags=["upload"])
+bp = Blueprint("upload", __name__, url_prefix="/api/upload")
 
 _invalidate_search = None
 _invalidate_llm = None
@@ -46,15 +46,16 @@ def _sql_insert(table, cols, ignore=False):
     ph = ", ".join(f":{c}" for c in cols)
     return f"INSERT{ig} INTO {table} ({cn}) VALUES ({ph})"
 
-@router.post("")
-async def upload_csv(
-    file: UploadFile = File(...),
-    type: str = Form("all"),
-    conn: sqlite3.Connection = Depends(get_db),
-):
+
+@bp.route("", methods=["POST"])
+def upload_csv():
+    conn = get_db()
+    file = request.files.get("file")
+    upload_type = request.form.get("type", "all")
+
     if not file:
-        raise HTTPException(400, "No file uploaded")
-    content = await file.read()
+        return jsonify({"detail": "No file uploaded"}), 400
+    content = file.read()
 
     # 인코딩 자동 감지 (UTF-8 → EUC-KR → CP949)
     text = None
@@ -65,7 +66,7 @@ async def upload_csv(
         except (UnicodeDecodeError, ValueError):
             continue
     if text is None:
-        raise HTTPException(400, "파일 인코딩을 인식할 수 없습니다. UTF-8로 저장 후 다시 시도해주세요.")
+        return jsonify({"detail": "파일 인코딩을 인식할 수 없습니다. UTF-8로 저장 후 다시 시도해주세요."}), 400
 
     reader = csv.DictReader(io.StringIO(text))
     results = [{k.lower().strip(): v for k, v in row.items()} for row in reader]
@@ -77,16 +78,16 @@ async def upload_csv(
 
     try:
         for row in results:
-            if type == "project":
+            if upload_type == "project":
                 if not row.get("iacpj_nm"): continue
                 if conn.execute(sql_p, _mk(row, PROJECT_COLS)).rowcount > 0: pc += 1
-            elif type == "experiment":
+            elif upload_type == "experiment":
                 if not row.get("plan_id") or not row.get("iacpj_nm"): continue
                 if conn.execute(sql_e, _mk(row, EXPERIMENT_COLS)).rowcount > 0: ec += 1
-            elif type == "split":
+            elif upload_type == "split":
                 if not row.get("plan_id"): continue
                 if conn.execute(sql_s, _mk(row, SPLIT_COLS)).rowcount > 0: sc += 1
-            elif type == "all":
+            elif upload_type == "all":
                 if row.get("iacpj_nm"):
                     if conn.execute(sql_p, _mk(row, PROJECT_COLS)).rowcount > 0: pc += 1
                 if row.get("plan_id") and row.get("iacpj_nm"):
@@ -96,27 +97,35 @@ async def upload_csv(
         conn.commit()
     except Exception as e:
         conn.rollback()
-        raise HTTPException(500, f"Database error: {e}")
+        return jsonify({"detail": f"Database error: {e}"}), 500
 
     if _invalidate_search: _invalidate_search()
     if _invalidate_llm: _invalidate_llm()
 
-    return {"message":"Process completed","details":{"projectCount":pc,"experimentCount":ec,"splitCount":sc},"totalRows":len(results)}
+    return jsonify({
+        "message": "Process completed",
+        "details": {"projectCount": pc, "experimentCount": ec, "splitCount": sc},
+        "totalRows": len(results),
+    })
 
-@router.get("/stats")
-def get_stats(conn: sqlite3.Connection = Depends(get_db)):
+
+@bp.route("/stats", methods=["GET"])
+def get_stats():
+    conn = get_db()
     pc = conn.execute("SELECT COUNT(*) AS cnt FROM projects").fetchone()["cnt"]
     ec = conn.execute("SELECT COUNT(*) AS cnt FROM experiments").fetchone()["cnt"]
     sc = conn.execute("SELECT COUNT(*) AS cnt FROM split_tables").fetchone()["cnt"]
-    return {"projectCount": pc, "experimentCount": ec, "splitCount": sc}
+    return jsonify({"projectCount": pc, "experimentCount": ec, "splitCount": sc})
 
-@router.post("/clear")
-def clear_db(conn: sqlite3.Connection = Depends(get_db)):
+
+@bp.route("/clear", methods=["POST"])
+def clear_db():
+    conn = get_db()
     try:
-        for t in ("split_tables","experiments","projects","line_lots"):
+        for t in ("split_tables", "experiments", "projects", "line_lots"):
             conn.execute(f"DELETE FROM {t}")
         conn.commit()
-        return {"message": "DB 초기화 완료"}
+        return jsonify({"message": "DB 초기화 완료"})
     except Exception as e:
         conn.rollback()
-        raise HTTPException(500, str(e))
+        return jsonify({"detail": str(e)}), 500

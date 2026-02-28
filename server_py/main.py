@@ -1,23 +1,19 @@
 """
-FastAPI main application — mirrors server/index.js
-Run:  uvicorn server_py.main:app --port 3001 --reload
+Flask main application — mirrors server/index.js
+Run:  python -m server_py.main
 """
-from fastapi import FastAPI
-from fastapi.middleware.cors import CORSMiddleware
+from flask import Flask
+from flask_cors import CORS
 
-from .database import init_db, seed_data
+from .database import init_db, seed_data, close_db
 from .routes import projects, experiments, splits, search, upload, llm_search, line_lots, analysis
 
 # ── App ──
-app = FastAPI(title="Lab DB API", version="1.0.0")
+app = Flask(__name__)
+CORS(app, supports_credentials=True)
 
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
+# ── Close DB after each request ──
+app.teardown_appcontext(close_db)
 
 # ── Init DB ──
 init_db()
@@ -28,17 +24,16 @@ experiments.set_invalidate_index(search.invalidate_index)
 splits.set_invalidate_index(search.invalidate_index)
 upload.set_invalidate_fns(search.invalidate_index, llm_search.invalidate_index)
 
-# ── Register routers ──
-app.include_router(projects.router)
-app.include_router(experiments.router)
-app.include_router(splits.router)
-app.include_router(search.router)
-app.include_router(upload.router)
-app.include_router(llm_search.router)
-app.include_router(line_lots.router)
-app.include_router(analysis.router)
+# ── Register blueprints ──
+app.register_blueprint(projects.bp)
+app.register_blueprint(experiments.bp)
+app.register_blueprint(splits.bp)
+app.register_blueprint(search.bp)
+app.register_blueprint(upload.bp)
+app.register_blueprint(llm_search.bp)
+app.register_blueprint(line_lots.bp)
+app.register_blueprint(analysis.bp)
 
 
 if __name__ == "__main__":
-    import uvicorn
-    uvicorn.run("server_py.main:app", host="0.0.0.0", port=3001, reload=True)
+    app.run(host="0.0.0.0", port=3001, debug=True)

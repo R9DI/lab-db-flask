@@ -1,22 +1,23 @@
 """
-/api/line-lots — exact port of server/routes/lineLots.js
+/api/line-lots — Flask version
 """
-import sqlite3
-from fastapi import APIRouter, Depends
+from flask import Blueprint, jsonify
 from ..database import get_db, dict_rows
 
-router = APIRouter(prefix="/api/line-lots", tags=["line-lots"])
+bp = Blueprint("line_lots", __name__, url_prefix="/api/line-lots")
 
 
-@router.get("/")
-def available_lots(conn: sqlite3.Connection = Depends(get_db)):
+@bp.route("/", methods=["GET"])
+def available_lots():
+    conn = get_db()
     rows = conn.execute(
         "SELECT * FROM line_lots WHERE status = 'available' ORDER BY estimated_arrival ASC"
     ).fetchall()
-    return dict_rows(rows)
+    return jsonify(dict_rows(rows))
 
 
-@router.get("/all")
-def all_lots(conn: sqlite3.Connection = Depends(get_db)):
+@bp.route("/all", methods=["GET"])
+def all_lots():
+    conn = get_db()
     rows = conn.execute("SELECT * FROM line_lots ORDER BY lot_id").fetchall()
-    return dict_rows(rows)
+    return jsonify(dict_rows(rows))

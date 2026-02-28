@@ -1,14 +1,14 @@
 """
-/api/search — exact port of server/routes/search.js
+/api/search — Flask version
 TF-IDF search with suggestions and summary generation.
 """
 import re
 import sqlite3
-from fastapi import APIRouter, Depends, HTTPException
+from flask import Blueprint, jsonify, request
 from ..database import get_db, dict_row, dict_rows
 from ..search_engine import TfIdfSearchEngine
 
-router = APIRouter(prefix="/api/search", tags=["search"])
+bp = Blueprint("search", __name__, url_prefix="/api/search")
 
 engine = TfIdfSearchEngine()
 _indexed = False
@@ -223,12 +223,14 @@ def _parse_query(raw_query: str):
     return quoted_terms, normal_query
 
 
-@router.post("/")
-def search(body: dict, conn: sqlite3.Connection = Depends(get_db)):
+@bp.route("/", methods=["POST"])
+def search_endpoint():
+    conn = get_db()
+    body = request.get_json(force=True)
     query = body.get("query")
     top_k = body.get("topK", 10)
     if not query:
-        raise HTTPException(status_code=400, detail="query is required")
+        return jsonify({"detail": "query is required"}), 400
 
     global _indexed
     if not _indexed:
@@ -243,9 +245,6 @@ def search(body: dict, conn: sqlite3.Connection = Depends(get_db)):
         ]
         if normal_query:
             tfidf_results = engine.search(normal_query, len(engine.documents))
-            score_map = {id(r["document"]): r["score"] for r in tfidf_results}
-            doc_id_map = {id(doc): doc for doc in engine.documents}
-            # match by content
             score_lookup = {}
             for r in tfidf_results:
                 score_lookup[r["document"].get("id")] = r["score"]
@@ -285,12 +284,13 @@ def search(body: dict, conn: sqlite3.Connection = Depends(get_db)):
     summary = _generate_summary(enriched, query)
     suggestions = _extract_suggestions(enriched, query)
 
-    return {"summary": summary, "suggestions": suggestions, "results": enriched}
+    return jsonify({"summary": summary, "suggestions": suggestions, "results": enriched})
 
 
-@router.post("/reindex")
-def reindex(conn: sqlite3.Connection = Depends(get_db)):
+@bp.route("/reindex", methods=["POST"])
+def reindex():
+    conn = get_db()
     global _indexed
     _indexed = False
     _ensure_index(conn)
-    return {"message": "Reindexed", "documentCount": len(engine.documents)}
+    return jsonify({"message": "Reindexed", "documentCount": len(engine.documents)})

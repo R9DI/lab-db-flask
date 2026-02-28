@@ -1,11 +1,11 @@
 """
 Database module — SQLite connection, schema init, seed data.
-Mirrors server/db.js exactly.
+Flask version — uses flask.g for per-request connections.
 """
 import sqlite3
 import os
 from datetime import datetime, timedelta
-from contextlib import contextmanager
+from flask import g
 
 DB_PATH = os.path.join(os.path.dirname(__file__), "lab.db")
 
@@ -23,13 +23,18 @@ def get_connection() -> sqlite3.Connection:
     return conn
 
 
-def get_db():
-    """FastAPI dependency — yields a connection then closes it."""
-    conn = get_connection()
-    try:
-        yield conn
-    finally:
-        conn.close()
+def get_db() -> sqlite3.Connection:
+    """Flask per-request DB connection stored in g."""
+    if "db" not in g:
+        g.db = get_connection()
+    return g.db
+
+
+def close_db(e=None):
+    """Close the DB connection at the end of a request."""
+    db = g.pop("db", None)
+    if db is not None:
+        db.close()
 
 
 def dict_row(row: sqlite3.Row | None):

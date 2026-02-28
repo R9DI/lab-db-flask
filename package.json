@@ -4,7 +4,7 @@
   "private": true,
   "scripts": {
     "dev": "concurrently \"pnpm run server\" \"pnpm run client\"",
-    "server": "uvicorn server_py.main:app --port 3001 --reload",
+    "server": "python -m server_py.main",
     "client": "cd client && pnpm run dev"
   },
   "dependencies": {

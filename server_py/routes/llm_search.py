@@ -1,15 +1,16 @@
 """
-/api/llm-search — LLM-assisted search with TF-IDF pre-filtering.
+/api/llm-search — Flask version. LLM-assisted search with TF-IDF pre-filtering.
 """
 import re
 import json
 import os
 import sqlite3
-from fastapi import APIRouter, Depends, HTTPException
+import requests as http_requests
+from flask import Blueprint, jsonify, request
 from ..database import get_db, dict_row, dict_rows
 from ..search_engine import TfIdfSearchEngine
 
-router = APIRouter(prefix="/api/llm-search", tags=["llm-search"])
+bp = Blueprint("llm_search", __name__, url_prefix="/api/llm-search")
 
 engine = TfIdfSearchEngine()
 _indexed = False
@@ -117,25 +118,26 @@ SYSTEM_PROMPT = """당신은 반도체 실험 데이터베이스 탐색 도우�
 - 영어 사용 금지 (한국어 전용).
 - 단순 목록 나열 금지."""
 
-async def _call_llm(config, system_prompt, user_message, history=None):
-    import httpx
-    messages = [{"role":"system","content":system_prompt}]
+def _call_llm(config, system_prompt, user_message, history=None):
+    """Synchronous LLM call using requests library."""
+    messages = [{"role": "system", "content": system_prompt}]
     if history:
         messages.extend(history)
-    messages.append({"role":"user","content":user_message})
-    headers = {"Content-Type":"application/json"}
+    messages.append({"role": "user", "content": user_message})
+    headers = {"Content-Type": "application/json"}
     if config.get("apiKey"):
         headers["Authorization"] = f"Bearer {config['apiKey']}"
-    async with httpx.AsyncClient(timeout=60) as client:
-        resp = await client.post(
-            f"{config['baseUrl']}/chat/completions",
-            headers=headers,
-            json={"model":config["model"],"messages":messages,"temperature":0.3,"max_tokens":1500},
-        )
-        if resp.status_code != 200:
-            raise Exception(f"LLM API error ({resp.status_code}): {resp.text}")
-        data = resp.json()
-        return data.get("choices",[{}])[0].get("message",{}).get("content","응답을 생성하지 못했습니다.")
+
+    resp = http_requests.post(
+        f"{config['baseUrl']}/chat/completions",
+        headers=headers,
+        json={"model": config["model"], "messages": messages, "temperature": 0.3, "max_tokens": 1500},
+        timeout=60,
+    )
+    if resp.status_code != 200:
+        raise Exception(f"LLM API error ({resp.status_code}): {resp.text}")
+    data = resp.json()
+    return data.get("choices", [{}])[0].get("message", {}).get("content", "응답을 생성하지 못했습니다.")
 
 def _parse_query(raw):
     qt = [m.group(1).strip() for m in re.finditer(r'"([^"]+)"', raw) if m.group(1).strip()]
@@ -144,59 +146,64 @@ def _parse_query(raw):
     return qt, nq
 
 # ── Config endpoints ──
-@router.get("/config")
+@bp.route("/config", methods=["GET"])
 def get_config_endpoint():
     c = _get_config()
     if not c:
-        return {"configured": False}
+        return jsonify({"configured": False})
     hint = ""
     if c.get("apiKey"):
         k = c["apiKey"]
         hint = k[:4] + "****" + k[-4:] if len(k) >= 8 else "****"
-    return {"configured":True,"baseUrl":c["baseUrl"],"model":c["model"],"apiKeyHint":hint}
+    return jsonify({"configured": True, "baseUrl": c["baseUrl"], "model": c["model"], "apiKeyHint": hint})
 
-@router.post("/config")
-def save_config_endpoint(body: dict):
+@bp.route("/config", methods=["POST"])
+def save_config_endpoint():
+    body = request.get_json(force=True)
     base_url = body.get("baseUrl")
     model = body.get("model")
     if not base_url or not model:
-        raise HTTPException(400,"baseUrl과 model은 필수입니다.")
-    c = {"baseUrl":base_url.rstrip("/"),"apiKey":body.get("apiKey",""),"model":model}
+        return jsonify({"detail": "baseUrl과 model은 필수입니다."}), 400
+    c = {"baseUrl": base_url.rstrip("/"), "apiKey": body.get("apiKey", ""), "model": model}
     _save_config(c)
     hint = ""
     if c["apiKey"]:
         k = c["apiKey"]
-        hint = k[:4]+"****"+k[-4:] if len(k)>=8 else "****"
-    return {"message":"LLM 설정이 저장되었습니다.","configured":True,"baseUrl":c["baseUrl"],"model":c["model"],"apiKeyHint":hint}
+        hint = k[:4]+"****"+k[-4:] if len(k) >= 8 else "****"
+    return jsonify({"message": "LLM 설정이 저장되었습니다.", "configured": True, "baseUrl": c["baseUrl"], "model": c["model"], "apiKeyHint": hint})
 
-@router.delete("/config")
+@bp.route("/config", methods=["DELETE"])
 def delete_config_endpoint():
     try:
         if os.path.exists(CONFIG_PATH): os.remove(CONFIG_PATH)
-    except: pass
-    return {"message":"LLM 설정이 삭제되었습니다.","configured":False}
+    except Exception:
+        pass
+    return jsonify({"message": "LLM 설정이 삭제되었습니다.", "configured": False})
 
-@router.post("/config/test")
-async def test_config(body: dict):
+@bp.route("/config/test", methods=["POST"])
+def test_config():
+    body = request.get_json(force=True)
     base_url = body.get("baseUrl")
     model = body.get("model")
     if not base_url or not model:
-        raise HTTPException(400,"baseUrl과 model은 필수입니다.")
+        return jsonify({"detail": "baseUrl과 model은 필수입니다."}), 400
     try:
-        tc = {"baseUrl":base_url.rstrip("/"),"apiKey":body.get("apiKey",""),"model":model}
-        answer = await _call_llm(tc,"You are a test assistant.","Say 'OK' in Korean.",[])
-        return {"success":True,"response":answer}
+        tc = {"baseUrl": base_url.rstrip("/"), "apiKey": body.get("apiKey", ""), "model": model}
+        answer = _call_llm(tc, "You are a test assistant.", "Say 'OK' in Korean.", [])
+        return jsonify({"success": True, "response": answer})
     except Exception as e:
-        return {"success":False,"error":str(e)}
+        return jsonify({"success": False, "error": str(e)})
 
 # ── Main search ──
-@router.post("/")
-async def llm_search(body: dict, conn: sqlite3.Connection = Depends(get_db)):
+@bp.route("/", methods=["POST"])
+def llm_search_endpoint():
+    conn = get_db()
+    body = request.get_json(force=True)
     query = body.get("query")
     history = body.get("conversationHistory", [])
     candidate_ids = body.get("candidateIds")
     if not query:
-        raise HTTPException(400,"query is required")
+        return jsonify({"detail": "query is required"}), 400
 
     global _indexed
     if not _indexed:
@@ -212,15 +219,15 @@ async def llm_search(body: dict, conn: sqlite3.Connection = Depends(get_db)):
         if filtered:
             candidates = filtered[:15]
         else:
-            candidates = [{"score":0.5,"document":d} for d in engine.documents if d.get("id") in id_set]
+            candidates = [{"score": 0.5, "document": d} for d in engine.documents if d.get("id") in id_set]
     elif qt:
         exact = [d for d in engine.documents if all(p.lower() in engine._doc_to_text(d).lower() for p in qt)]
         if nq:
             tr = engine.search(nq, len(engine.documents))
-            sm = {r["document"].get("id"):r["score"] for r in tr}
-            candidates = sorted([{"score":sm.get(d.get("id"),0),"document":d} for d in exact], key=lambda x:x["score"], reverse=True)[:15]
+            sm = {r["document"].get("id"): r["score"] for r in tr}
+            candidates = sorted([{"score": sm.get(d.get("id"), 0), "document": d} for d in exact], key=lambda x: x["score"], reverse=True)[:15]
         else:
-            candidates = [{"score":1,"document":d} for d in exact[:15]]
+            candidates = [{"score": 1, "document": d} for d in exact[:15]]
     else:
         pr = engine.search(query, 15)
         tokens = engine.tokenize(query)
@@ -232,26 +239,26 @@ async def llm_search(body: dict, conn: sqlite3.Connection = Depends(get_db)):
         doc = r["document"]
         splits = conn.execute("SELECT * FROM split_tables WHERE plan_id=?", (doc.get("plan_id"),)).fetchall()
         proj = conn.execute("SELECT * FROM projects WHERE iacpj_nm=?", (doc.get("iacpj_nm"),)).fetchone()
-        enriched.append({"score":round(r["score"]*1000)/1000,"experiment":doc,"project":dict_row(proj),"splits":dict_rows(splits)})
+        enriched.append({"score": round(r["score"]*1000)/1000, "experiment": doc, "project": dict_row(proj), "splits": dict_rows(splits)})
 
     config = _get_config()
     if not config:
-        return {
-            "answer":f"LLM이 설정되지 않았습니다. 상단에서 모델을 등록해주세요.\n\n키워드 검색 결과: \"{query}\"에 대해 {len(enriched)}건의 실험이 검색되었습니다.",
-            "results":enriched,"resultCount":len(enriched),"llmError":True,
-        }
+        return jsonify({
+            "answer": f"LLM이 설정되지 않았습니다. 상단에서 모델을 등록해주세요.\n\n키워드 검색 결과: \"{query}\"에 대해 {len(enriched)}건의 실험이 검색되었습니다.",
+            "results": enriched, "resultCount": len(enriched), "llmError": True,
+        })
     try:
         total = len(enriched)
-        ctx = "\n\n".join(_exp_to_context(r,i,total) for i,r in enumerate(enriched)) if total else "관련 실험 데이터를 찾지 못했습니다."
+        ctx = "\n\n".join(_exp_to_context(r, i, total) for i, r in enumerate(enriched)) if total else "관련 실험 데이터를 찾지 못했습니다."
         narrowing = candidate_ids and len(candidate_ids) > 0
         if narrowing:
             um = f"[현재 후보 실험 목록 ({total}건)]\n{ctx}\n\n[사용자 메시지]\n{query}\n\n후보 실험들의 차이점을 분석하고, 사용자의 답변을 반영하여 어떤 실험이 더 적합한지 안내하며 후보를 좁혀주세요."
         else:
             um = f"[검색된 후보 실험 목록 ({total}건)]\n{ctx}\n\n[사용자 질문]\n{query}\n\n위 후보 실험들의 핵심 차이점을 설명하고, 범위를 좁힐 수 있는 질문을 제시해주세요."
-        llm_resp = await _call_llm(config, SYSTEM_PROMPT, um, history)
-        return {"answer":llm_resp,"results":enriched,"resultCount":len(enriched)}
+        llm_resp = _call_llm(config, SYSTEM_PROMPT, um, history)
+        return jsonify({"answer": llm_resp, "results": enriched, "resultCount": len(enriched)})
     except Exception as e:
-        return {
-            "answer":f"LLM 호출에 실패하여 키워드 검색 결과만 표시합니다.\n({e})\n\n검색어 \"{query}\"에 대해 {len(enriched)}건의 실험이 검색되었습니다.",
-            "results":enriched,"resultCount":len(enriched),"llmError":True,
-        }
+        return jsonify({
+            "answer": f"LLM 호출에 실패하여 키워드 검색 결과만 표시합니다.\n({e})\n\n검색어 \"{query}\"에 대해 {len(enriched)}건의 실험이 검색되었습니다.",
+            "results": enriched, "resultCount": len(enriched), "llmError": True,
+        })

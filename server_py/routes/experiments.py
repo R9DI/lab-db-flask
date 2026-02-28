@@ -1,11 +1,11 @@
 """
-/api/experiments — exact port of server/routes/experiments.js
+/api/experiments — Flask version
 """
 import sqlite3
-from fastapi import APIRouter, Depends, HTTPException, Query
+from flask import Blueprint, jsonify, request
 from ..database import get_db, dict_row, dict_rows
 
-router = APIRouter(prefix="/api/experiments", tags=["experiments"])
+bp = Blueprint("experiments", __name__, url_prefix="/api/experiments")
 
 # Will be set from main.py after search router is created
 _invalidate_index = None
@@ -26,11 +26,10 @@ SPLIT_COLS = [
 ]
 
 
-@router.get("/")
-def list_experiments(
-    iacpj_nm: str | None = Query(None),
-    conn: sqlite3.Connection = Depends(get_db),
-):
+@bp.route("/", methods=["GET"])
+def list_experiments():
+    conn = get_db()
+    iacpj_nm = request.args.get("iacpj_nm")
     base = """
         SELECT e.*, COALESCE(s.split_count, 0) AS split_count
         FROM experiments e
@@ -44,14 +43,16 @@ def list_experiments(
         rows = conn.execute(base + " WHERE e.iacpj_nm = ?", (iacpj_nm,)).fetchall()
     else:
         rows = conn.execute(base).fetchall()
-    return dict_rows(rows)
+    return jsonify(dict_rows(rows))
 
 
-@router.post("/", status_code=201)
-def create_experiment(body: dict, conn: sqlite3.Connection = Depends(get_db)):
+@bp.route("/", methods=["POST"])
+def create_experiment():
+    conn = get_db()
+    body = request.get_json(force=True)
     iacpj_nm = (body.get("iacpj_nm") or "").strip()
     if not iacpj_nm:
-        raise HTTPException(status_code=400, detail="iacpj_nm은 필수입니다.")
+        return jsonify({"detail": "iacpj_nm은 필수입니다."}), 400
 
     cols = [
         "plan_id", "iacpj_nm", "team", "requester", "lot_code", "module",
@@ -79,21 +80,22 @@ def create_experiment(body: dict, conn: sqlite3.Connection = Depends(get_db)):
             "SELECT * FROM experiments WHERE id = ?", (cursor.lastrowid,)
         ).fetchone()
         _invalidate()
-        return dict_row(created)
+        return jsonify(dict_row(created)), 201
     except sqlite3.IntegrityError as e:
         if "FOREIGN KEY" in str(e):
-            raise HTTPException(
-                status_code=400,
-                detail=f"과제 '{iacpj_nm}'이(가) 존재하지 않습니다. 과제를 먼저 등록해주세요.",
-            )
-        raise HTTPException(status_code=500, detail=f"실험 생성 중 오류 발생: {e}")
+            return jsonify({
+                "detail": f"과제 '{iacpj_nm}'이(가) 존재하지 않습니다. 과제를 먼저 등록해주세요."
+            }), 400
+        return jsonify({"detail": f"실험 생성 중 오류 발생: {e}"}), 500
 
 
-@router.post("/{plan_id}/splits", status_code=201)
-def create_splits(plan_id: str, body: dict, conn: sqlite3.Connection = Depends(get_db)):
+@bp.route("/<plan_id>/splits", methods=["POST"])
+def create_splits(plan_id):
+    conn = get_db()
+    body = request.get_json(force=True)
     splits = body.get("splits")
     if not splits or not isinstance(splits, list) or len(splits) == 0:
-        raise HTTPException(status_code=400, detail="splits 배열이 필요합니다.")
+        return jsonify({"detail": "splits 배열이 필요합니다."}), 400
 
     col_names = ", ".join(SPLIT_COLS)
     placeholders = ", ".join(f":{c}" for c in SPLIT_COLS)
@@ -108,17 +110,19 @@ def create_splits(plan_id: str, body: dict, conn: sqlite3.Connection = Depends(g
             )
             count += 1
         conn.commit()
-        return {"message": f"{count}건의 스플릿이 저장되었습니다.", "count": count}
+        return jsonify({"message": f"{count}건의 스플릿이 저장되었습니다.", "count": count}), 201
     except Exception as e:
         conn.rollback()
-        raise HTTPException(status_code=500, detail=f"스플릿 저장 중 오류 발생: {e}")
+        return jsonify({"detail": f"스플릿 저장 중 오류 발생: {e}"}), 500
 
 
-@router.patch("/{exp_id}/assign-lot")
-def assign_lot(exp_id: int, body: dict, conn: sqlite3.Connection = Depends(get_db)):
+@bp.route("/<int:exp_id>/assign-lot", methods=["PATCH"])
+def assign_lot(exp_id):
+    conn = get_db()
+    body = request.get_json(force=True)
     lot_id = (body.get("lot_id") or "").strip()
     if not lot_id:
-        raise HTTPException(status_code=400, detail="lot_id는 필수입니다.")
+        return jsonify({"detail": "lot_id는 필수입니다."}), 400
 
     try:
         new_plan_id = lot_id
@@ -129,7 +133,7 @@ def assign_lot(exp_id: int, body: dict, conn: sqlite3.Connection = Depends(get_d
             (new_plan_id, exp_id),
         )
         if result.rowcount == 0:
-            raise HTTPException(status_code=404, detail="실험을 찾을 수 없습니다.")
+            return jsonify({"detail": "실험을 찾을 수 없습니다."}), 404
 
         conn.execute(
             "UPDATE split_tables SET plan_id = ? WHERE plan_id = ?",
@@ -145,43 +149,45 @@ def assign_lot(exp_id: int, body: dict, conn: sqlite3.Connection = Depends(get_d
             "SELECT * FROM experiments WHERE id = ?", (exp_id,)
         ).fetchone()
         _invalidate()
-        return dict_row(updated)
-    except HTTPException:
-        raise
+        return jsonify(dict_row(updated))
     except Exception as e:
         conn.rollback()
-        raise HTTPException(status_code=500, detail="Lot 배정 중 오류 발생")
+        return jsonify({"detail": "Lot 배정 중 오류 발생"}), 500
 
 
-@router.patch("/{exp_id}/status")
-def update_status(exp_id: int, body: dict, conn: sqlite3.Connection = Depends(get_db)):
+@bp.route("/<int:exp_id>/status", methods=["PATCH"])
+def update_status(exp_id):
+    conn = get_db()
+    body = request.get_json(force=True)
     status = body.get("status")
     valid = ["Assign 전", "실험 진행 중", "실험 종료(결과 등록 전)", "실험 종료(결과 완료)"]
     if status not in valid:
-        raise HTTPException(status_code=400, detail="유효하지 않은 상태입니다.")
+        return jsonify({"detail": "유효하지 않은 상태입니다."}), 400
 
     result = conn.execute(
         "UPDATE experiments SET status = ? WHERE id = ?", (status, exp_id)
     )
     conn.commit()
     if result.rowcount == 0:
-        raise HTTPException(status_code=404, detail="실험을 찾을 수 없습니다.")
-    return {"message": "상태가 변경되었습니다.", "status": status}
+        return jsonify({"detail": "실험을 찾을 수 없습니다."}), 404
+    return jsonify({"message": "상태가 변경되었습니다.", "status": status})
 
 
-@router.patch("/{exp_id}/complete")
-def toggle_complete(exp_id: int, body: dict, conn: sqlite3.Connection = Depends(get_db)):
+@bp.route("/<int:exp_id>/complete", methods=["PATCH"])
+def toggle_complete(exp_id):
+    conn = get_db()
+    body = request.get_json(force=True)
     field = body.get("field")
     value = body.get("value")
     if field not in ("split_completed", "summary_completed"):
-        raise HTTPException(status_code=400, detail="유효하지 않은 필드입니다.")
+        return jsonify({"detail": "유효하지 않은 필드입니다."}), 400
 
     int_val = 1 if value else 0
     result = conn.execute(
         f"UPDATE experiments SET {field} = ? WHERE id = ?", (int_val, exp_id)
     )
     if result.rowcount == 0:
-        raise HTTPException(status_code=404, detail="실험을 찾을 수 없습니다.")
+        return jsonify({"detail": "실험을 찾을 수 없습니다."}), 404
 
     # Fab이 In Fab이 아닐 때 Status 자동 재계산
     experiment = conn.execute(
@@ -194,11 +200,13 @@ def toggle_complete(exp_id: int, body: dict, conn: sqlite3.Connection = Depends(
         conn.execute("UPDATE experiments SET status = ? WHERE id = ?", (new_status, exp_id))
 
     conn.commit()
-    return {"message": "업데이트 완료", field: int_val}
+    return jsonify({"message": "업데이트 완료", field: int_val})
 
 
-@router.patch("/{exp_id}/summary")
-def save_summary(exp_id: int, body: dict, conn: sqlite3.Connection = Depends(get_db)):
+@bp.route("/<int:exp_id>/summary", methods=["PATCH"])
+def save_summary(exp_id):
+    conn = get_db()
+    body = request.get_json(force=True)
     summary_text = body.get("summary_text")
 
     result = conn.execute(
@@ -206,7 +214,7 @@ def save_summary(exp_id: int, body: dict, conn: sqlite3.Connection = Depends(get
         (summary_text, exp_id),
     )
     if result.rowcount == 0:
-        raise HTTPException(status_code=404, detail="실험을 찾을 수 없습니다.")
+        return jsonify({"detail": "실험을 찾을 수 없습니다."}), 404
 
     experiment = conn.execute(
         "SELECT * FROM experiments WHERE id = ?", (exp_id,)
@@ -219,21 +227,23 @@ def save_summary(exp_id: int, body: dict, conn: sqlite3.Connection = Depends(get
         conn.execute("UPDATE experiments SET status = ? WHERE id = ?", (new_status, exp_id))
 
     conn.commit()
-    return {"message": "Summary 저장 완료", "summary_completed": 1}
+    return jsonify({"message": "Summary 저장 완료", "summary_completed": 1})
 
 
-@router.patch("/{exp_id}/fab-status")
-def update_fab_status(exp_id: int, body: dict, conn: sqlite3.Connection = Depends(get_db)):
+@bp.route("/<int:exp_id>/fab-status", methods=["PATCH"])
+def update_fab_status(exp_id):
+    conn = get_db()
+    body = request.get_json(force=True)
     fab_status = body.get("fab_status")
     valid_fab = ["In Fab", "Fab Out", "EPM", "WT"]
     if fab_status and fab_status not in valid_fab:
-        raise HTTPException(status_code=400, detail="유효하지 않은 Fab 상태입니다.")
+        return jsonify({"detail": "유효하지 않은 Fab 상태입니다."}), 400
 
     experiment = conn.execute(
         "SELECT * FROM experiments WHERE id = ?", (exp_id,)
     ).fetchone()
     if not experiment:
-        raise HTTPException(status_code=404, detail="실험을 찾을 수 없습니다.")
+        return jsonify({"detail": "실험을 찾을 수 없습니다."}), 404
 
     if fab_status == "In Fab":
         new_status = "실험 진행 중"
@@ -248,16 +258,17 @@ def update_fab_status(exp_id: int, body: dict, conn: sqlite3.Connection = Depend
         (fab_status, new_status, exp_id),
     )
     conn.commit()
-    return {"message": "Fab 상태가 변경되었습니다.", "fab_status": fab_status, "status": new_status}
+    return jsonify({"message": "Fab 상태가 변경되었습니다.", "fab_status": fab_status, "status": new_status})
 
 
-@router.get("/{exp_id}")
-def get_experiment(exp_id: int, conn: sqlite3.Connection = Depends(get_db)):
+@bp.route("/<int:exp_id>", methods=["GET"])
+def get_experiment(exp_id):
+    conn = get_db()
     experiment = conn.execute(
         "SELECT * FROM experiments WHERE id = ?", (exp_id,)
     ).fetchone()
     if not experiment:
-        raise HTTPException(status_code=404, detail="Experiment not found")
+        return jsonify({"detail": "Experiment not found"}), 404
 
     splits = conn.execute(
         "SELECT * FROM split_tables WHERE plan_id = ?", (experiment["plan_id"],)
@@ -269,4 +280,4 @@ def get_experiment(exp_id: int, conn: sqlite3.Connection = Depends(get_db)):
     result = dict_row(experiment)
     result["splits"] = dict_rows(splits)
     result["project"] = dict_row(project)
-    return result
+    return jsonify(result)
