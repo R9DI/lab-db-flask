@@ -2,7 +2,7 @@
 /api/line-lots — Flask version
 """
 from flask import Blueprint, jsonify
-from ..database import get_db, dict_rows
+from database import get_db, dict_rows
 
 bp = Blueprint("line_lots", __name__, url_prefix="/api/line-lots")
 

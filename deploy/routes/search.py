@@ -5,8 +5,8 @@ TF-IDF search with suggestions and summary generation.
 import re
 import sqlite3
 from flask import Blueprint, jsonify, request
-from ..database import get_db, dict_row, dict_rows
-from ..search_engine import TfIdfSearchEngine
+from database import get_db, dict_row, dict_rows
+from search_engine import TfIdfSearchEngine
 
 bp = Blueprint("search", __name__, url_prefix="/api/search")
 

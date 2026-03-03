@@ -7,8 +7,8 @@ import os
 import sqlite3
 import requests as http_requests
 from flask import Blueprint, jsonify, request
-from ..database import get_db, dict_row, dict_rows
-from ..search_engine import TfIdfSearchEngine
+from database import get_db, dict_row, dict_rows
+from search_engine import TfIdfSearchEngine
 
 bp = Blueprint("llm_search", __name__, url_prefix="/api/llm-search")
 

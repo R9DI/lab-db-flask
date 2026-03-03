@@ -5,7 +5,7 @@ import csv
 import io
 import sqlite3
 from flask import Blueprint, jsonify, request
-from ..database import get_db
+from database import get_db
 
 bp = Blueprint("upload", __name__, url_prefix="/api/upload")
 

@@ -4,7 +4,7 @@
 import re
 import sqlite3
 from flask import Blueprint, jsonify
-from ..database import get_db, dict_rows
+from database import get_db, dict_rows
 
 bp = Blueprint("analysis", __name__, url_prefix="/api/analysis")
 
