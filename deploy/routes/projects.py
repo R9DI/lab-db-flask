@@ -3,7 +3,7 @@
 """
 import sqlite3
 from flask import Blueprint, jsonify, request, abort
-from database import get_db, dict_row, dict_rows
+from ..database import get_db, dict_row, dict_rows
 
 bp = Blueprint("projects", __name__, url_prefix="/api/projects")
 
