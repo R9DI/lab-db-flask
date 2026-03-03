@@ -114,6 +114,15 @@ const DEMO_SPLITS = {
       eqp_id: "ETCH01",
       recipe_id: "SN_BSI_STD",
       note: "기준 조건",
+      user_def_val_1: "O",
+      user_def_val_2: "O",
+      user_def_val_3: "O",
+      user_def_val_4: "O",
+      user_def_val_5: "O",
+      user_def_val_6: "O",
+      user_def_val_7: "O",
+      user_def_val_8: "O",
+      user_def_val_9: "O",
     },
     {
       sno: 2,
@@ -126,6 +135,14 @@ const DEMO_SPLITS = {
       eqp_id: "ETCH01",
       recipe_id: "SN_BSI_S1",
       note: "CF4 증가",
+      user_def_val_10: "O",
+      user_def_val_11: "O",
+      user_def_val_12: "O",
+      user_def_val_13: "O",
+      user_def_val_14: "O",
+      user_def_val_15: "O",
+      user_def_val_16: "O",
+      user_def_val_17: "O",
     },
     {
       sno: 3,
@@ -138,6 +155,14 @@ const DEMO_SPLITS = {
       eqp_id: "ETCH01",
       recipe_id: "SN_BSI_S2",
       note: "",
+      user_def_val_18: "O",
+      user_def_val_19: "O",
+      user_def_val_20: "O",
+      user_def_val_21: "O",
+      user_def_val_22: "O",
+      user_def_val_23: "O",
+      user_def_val_24: "O",
+      user_def_val_25: "O",
     },
     {
       sno: 4,
@@ -150,6 +175,31 @@ const DEMO_SPLITS = {
       eqp_id: "STRIP01",
       recipe_id: "STR_STD",
       note: "표준 Strip",
+      user_def_val_1: "O",
+      user_def_val_2: "O",
+      user_def_val_3: "O",
+      user_def_val_4: "O",
+      user_def_val_5: "O",
+      user_def_val_6: "O",
+      user_def_val_7: "O",
+      user_def_val_8: "O",
+      user_def_val_9: "O",
+      user_def_val_10: "O",
+      user_def_val_11: "O",
+      user_def_val_12: "O",
+      user_def_val_13: "O",
+      user_def_val_14: "O",
+      user_def_val_15: "O",
+      user_def_val_16: "O",
+      user_def_val_17: "O",
+      user_def_val_18: "O",
+      user_def_val_19: "O",
+      user_def_val_20: "O",
+      user_def_val_21: "O",
+      user_def_val_22: "O",
+      user_def_val_23: "O",
+      user_def_val_24: "O",
+      user_def_val_25: "O",
     },
     {
       sno: 5,
@@ -174,6 +224,31 @@ const DEMO_SPLITS = {
       eqp_id: "WET01",
       recipe_id: "CLN_STD",
       note: "후처리",
+      user_def_val_1: "O",
+      user_def_val_2: "O",
+      user_def_val_3: "O",
+      user_def_val_4: "O",
+      user_def_val_5: "O",
+      user_def_val_6: "O",
+      user_def_val_7: "O",
+      user_def_val_8: "O",
+      user_def_val_9: "O",
+      user_def_val_10: "O",
+      user_def_val_11: "O",
+      user_def_val_12: "O",
+      user_def_val_13: "O",
+      user_def_val_14: "O",
+      user_def_val_15: "O",
+      user_def_val_16: "O",
+      user_def_val_17: "O",
+      user_def_val_18: "O",
+      user_def_val_19: "O",
+      user_def_val_20: "O",
+      user_def_val_21: "O",
+      user_def_val_22: "O",
+      user_def_val_23: "O",
+      user_def_val_24: "O",
+      user_def_val_25: "O",
     },
   ],
   RSAB002: [
@@ -494,7 +569,7 @@ function MonitoringModal({ item, rowIndex, onClose, onToggleWafer }) {
       onClick={onClose}
     >
       <div
-        className="bg-white rounded-2xl shadow-2xl w-[520px] max-w-[90vw] overflow-hidden"
+        className="bg-white rounded-2xl shadow-2xl w-[720px] max-w-[95vw] overflow-hidden"
         onClick={(e) => e.stopPropagation()}
       >
         {/* 헤더 */}
@@ -589,8 +664,8 @@ function MonitoringModal({ item, rowIndex, onClose, onToggleWafer }) {
             </span>
           </div>
           <div
-            className="grid grid-cols-13 gap-1.5"
-            style={{ gridTemplateColumns: "repeat(13, 1fr)" }}
+            className="grid gap-x-2 gap-y-6"
+            style={{ gridTemplateColumns: "repeat(15, 1fr)" }}
           >
             {Array.from({ length: totalWafers }, (_, i) => {
               const wfNum = i + 1;
@@ -786,10 +861,12 @@ function AIExperimentProgress() {
     (rowIndex) => {
       const row = checklist[rowIndex];
       if (!row) return;
-      // 모달 열기 (파란색/빨간색 모두)
-      setMonitoringModal({ rowIndex });
-      // 미설정일 때만 챗 알림
-      if (row.status !== "not_set") return;
+      if (row.status === "monitoring_set") {
+        // 파란색: 모달만 열기
+        setMonitoringModal({ rowIndex });
+        return;
+      }
+      // 빨간색(not_set): 채팅 알림만
       const step = row.step || "해당 Step";
       const param = row.parameter || "Parameter";
       setChatMessages((prev) => [
@@ -809,6 +886,7 @@ function AIExperimentProgress() {
             updated[rowIndex] = {
               ...updated[rowIndex],
               status: "monitoring_set",
+              monitoringWafers: [3, 12, 21],
             };
             setChecklist(updated);
             setChatMessages((prev) => [
@@ -847,9 +925,11 @@ function AIExperimentProgress() {
                   "bg-blue-50 text-blue-600 border-blue-200 hover:bg-blue-100",
                 onClick: () => {
                   const updated = [...checklist];
+                  const nums = opt.nums.split(", ").map(Number);
                   updated[rowIndex] = {
                     ...updated[rowIndex],
                     status: "monitoring_set",
+                    monitoringWafers: nums,
                   };
                   setChecklist(updated);
                   setChatMessages((prev) => [
@@ -901,21 +981,42 @@ function AIExperimentProgress() {
   };
 
   /* ─── Split Table 컬럼 ─── */
+  const wfCols = useMemo(() => {
+    const cols = [];
+    for (let i = 1; i <= 25; i++) {
+      cols.push({
+        headerName: `${i}`,
+        field: `user_def_val_${i}`,
+        width: 42,
+        cellStyle: (p) => {
+          if (p.value)
+            return {
+              color: "#059669",
+              fontWeight: "bold",
+              textAlign: "center",
+            };
+          return { textAlign: "center" };
+        },
+      });
+    }
+    return cols;
+  }, []);
+
   const splitColDefs = useMemo(
     () => [
       {
         headerName: "SNO",
         field: "sno",
-        width: 60,
+        width: 55,
         cellStyle: { textAlign: "center" },
       },
-      { headerName: "FAC", field: "fac_id", width: 60 },
-      { headerName: "OPER_ID", field: "oper_id", width: 110 },
-      { headerName: "공정명", field: "oper_nm", width: 110 },
+      { headerName: "FAC", field: "fac_id", width: 55 },
+      { headerName: "OPER_ID", field: "oper_id", width: 100 },
+      { headerName: "공정명", field: "oper_nm", width: 100 },
       {
         headerName: "Split",
         field: "eps_lot_gbn_cd",
-        width: 75,
+        width: 65,
         cellStyle: (p) => {
           const c = getSplitColor(p.value);
           return {
@@ -929,7 +1030,7 @@ function AIExperimentProgress() {
       {
         headerName: "조건",
         field: "work_cond_desc",
-        minWidth: 200,
+        minWidth: 180,
         flex: 1,
         editable: true,
         cellStyle: (p) => {
@@ -944,17 +1045,18 @@ function AIExperimentProgress() {
         valueFormatter: (p) =>
           !p.value || p.value.trim() === "" ? "⚠️ 조건 미입력" : p.value,
       },
-      { headerName: "장비", field: "eqp_id", width: 90 },
-      { headerName: "Recipe", field: "recipe_id", width: 130 },
+      { headerName: "장비", field: "eqp_id", width: 80 },
+      { headerName: "Recipe", field: "recipe_id", width: 120 },
       {
         headerName: "Note",
         field: "note",
-        minWidth: 120,
+        minWidth: 100,
         flex: 1,
         editable: true,
       },
+      ...wfCols,
     ],
-    [],
+    [wfCols],
   );
 
   /* ─── Checklist 컬럼 ─── */
