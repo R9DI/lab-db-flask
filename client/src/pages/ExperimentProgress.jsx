@@ -40,7 +40,9 @@ function ProjectInfoTab({ project }) {
           ({ label, value }) =>
             value && (
               <div key={label} className="bg-gray-50 rounded-lg p-3">
-                <span className="text-[11px] text-gray-500 block mb-0.5">{label}</span>
+                <span className="text-[11px] text-gray-500 block mb-0.5">
+                  {label}
+                </span>
                 <p className="text-sm font-medium text-gray-800">{value}</p>
               </div>
             ),
@@ -48,13 +50,17 @@ function ProjectInfoTab({ project }) {
       </div>
       {project.project_purpose && (
         <div className="bg-gray-50 rounded-lg p-3">
-          <span className="text-[11px] text-gray-500 block mb-0.5">과제 목적</span>
+          <span className="text-[11px] text-gray-500 block mb-0.5">
+            과제 목적
+          </span>
           <p className="text-sm text-gray-700">{project.project_purpose}</p>
         </div>
       )}
       {project.iacpj_ta_goa && (
         <div className="bg-gray-50 rounded-lg p-3">
-          <span className="text-[11px] text-gray-500 block mb-0.5">과제 목표</span>
+          <span className="text-[11px] text-gray-500 block mb-0.5">
+            과제 목표
+          </span>
           <p className="text-sm text-gray-700">{project.iacpj_ta_goa}</p>
         </div>
       )}
@@ -62,13 +68,115 @@ function ProjectInfoTab({ project }) {
   );
 }
 
+const EXPERIMENT_TYPES = ["INLINE", "EPM", "WT", "NUDD", "신뢰성"];
+const UNIT_OPTIONS = [
+  "Å",
+  "nm",
+  "μm",
+  "mm",
+  "kÅ",
+  "kA",
+  "A",
+  "V",
+  "mV",
+  "%",
+  "ea",
+  "℃",
+  "sec",
+  "rpm",
+  "W",
+];
+
+const emptyChecklistRow = {
+  exp_type: "",
+  step: "",
+  parameter: "",
+  unit: "",
+  target: "",
+  lower_spec: "",
+  upper_spec: "",
+  result: "",
+};
+
 const checklistColDefs = [
-  { field: "no", headerName: "No.", width: 60, editable: true },
-  { field: "item", headerName: "항목", flex: 1, minWidth: 200, editable: true },
-  { field: "status", headerName: "상태", width: 100, editable: true },
-  { field: "owner", headerName: "담당자", width: 100, editable: true },
-  { field: "due", headerName: "기한", width: 110, editable: true },
-  { field: "note", headerName: "비고", flex: 1, minWidth: 150, editable: true },
+  {
+    field: "exp_type",
+    headerName: "실험종류",
+    width: 120,
+    editable: true,
+    cellEditor: "agSelectCellEditor",
+    cellEditorParams: { values: EXPERIMENT_TYPES },
+    cellStyle: (p) => {
+      const colors = {
+        INLINE: "#3B82F6",
+        EPM: "#8B5CF6",
+        WT: "#F59E0B",
+        NUDD: "#10B981",
+        신뢰성: "#EF4444",
+      };
+      const c = colors[p.value];
+      return c
+        ? { color: c, fontWeight: 600, textAlign: "center" }
+        : { textAlign: "center" };
+    },
+  },
+  { field: "step", headerName: "Step", flex: 1, minWidth: 130, editable: true },
+  {
+    field: "parameter",
+    headerName: "Parameter",
+    flex: 1,
+    minWidth: 140,
+    editable: true,
+  },
+  {
+    field: "unit",
+    headerName: "Unit",
+    width: 90,
+    editable: true,
+    cellEditor: "agSelectCellEditor",
+    cellEditorParams: { values: UNIT_OPTIONS },
+    cellStyle: { textAlign: "center", color: "#6B7280" },
+  },
+  {
+    field: "target",
+    headerName: "Target",
+    width: 100,
+    editable: true,
+    cellStyle: { textAlign: "center" },
+  },
+  {
+    field: "lower_spec",
+    headerName: "Lower Spec",
+    width: 110,
+    editable: true,
+    cellStyle: { textAlign: "center" },
+  },
+  {
+    field: "upper_spec",
+    headerName: "Upper Spec",
+    width: 110,
+    editable: true,
+    cellStyle: { textAlign: "center" },
+  },
+  {
+    field: "result",
+    headerName: "Result",
+    width: 110,
+    editable: true,
+    cellStyle: (p) => {
+      const val = parseFloat(p.value);
+      if (isNaN(val)) return { textAlign: "center" };
+      const lo = parseFloat(p.data?.lower_spec);
+      const hi = parseFloat(p.data?.upper_spec);
+      const inSpec = (isNaN(lo) || val >= lo) && (isNaN(hi) || val <= hi);
+      return {
+        textAlign: "center",
+        fontWeight: 700,
+        color: inSpec ? "#059669" : "#DC2626",
+        backgroundColor: inSpec ? "#F0FDF4" : "#FEF2F2",
+      };
+    },
+  },
 ];
 
 /* ─── LOT 상세 정보 영역 ─── */
@@ -76,7 +184,7 @@ function LotDetail({ experiment }) {
   const [detail, setDetail] = useState(null);
   const [loading, setLoading] = useState(true);
   const [checklistRows, setChecklistRows] = useState([
-    { no: 1, item: "", status: "", owner: "", due: "", note: "" },
+    { ...emptyChecklistRow },
   ]);
   const [issue, setIssue] = useState("");
   const [inlineData, setInlineData] = useState("");
@@ -84,12 +192,13 @@ function LotDetail({ experiment }) {
   const [summary, setSummary] = useState("");
   const [summaryCompleted, setSummaryCompleted] = useState(false);
   const [summarySaving, setSummarySaving] = useState(false);
+  const checklistGridRef = useRef(null);
 
   useEffect(() => {
     if (!experiment) return;
     setLoading(true);
     // 실험 바뀌면 입력 초기화
-    setChecklistRows([{ no: 1, item: "", status: "", owner: "", due: "", note: "" }]);
+    setChecklistRows([{ ...emptyChecklistRow }]);
     setIssue("");
     setInlineData("");
     setOutlineData("");
@@ -107,16 +216,22 @@ function LotDetail({ experiment }) {
       .finally(() => setLoading(false));
   }, [experiment]);
 
-  if (loading) return <div className="text-center text-gray-400 py-8">로딩 중...</div>;
+  if (loading)
+    return <div className="text-center text-gray-400 py-8">로딩 중...</div>;
   if (!detail) return null;
 
-  const textareaCls = "w-full text-sm text-gray-700 bg-gray-50 border border-gray-200 rounded-lg px-3 py-2.5 resize-none focus:outline-none focus:ring-2 focus:ring-indigo-200 focus:border-indigo-300 transition placeholder-gray-300";
+  const textareaCls =
+    "w-full text-sm text-gray-700 bg-gray-50 border border-gray-200 rounded-lg px-3 py-2.5 resize-none focus:outline-none focus:ring-2 focus:ring-indigo-200 focus:border-indigo-300 transition placeholder-gray-300";
 
   const SectionHeader = ({ emoji, title, badge }) => (
     <div className="flex items-center gap-2 mb-2">
       <span>{emoji}</span>
       <h4 className="text-sm font-bold text-gray-700">{title}</h4>
-      {badge && <span className="text-[10px] px-1.5 py-0.5 bg-gray-100 text-gray-400 rounded">{badge}</span>}
+      {badge && (
+        <span className="text-[10px] px-1.5 py-0.5 bg-gray-100 text-gray-400 rounded">
+          {badge}
+        </span>
+      )}
     </div>
   );
 
@@ -130,7 +245,9 @@ function LotDetail({ experiment }) {
       <div>
         <div className="flex items-center gap-2 mb-2">
           <h4 className="text-sm font-bold text-gray-700">📋 Split Table</h4>
-          <span className="text-xs text-gray-400">(plan_id: {detail.plan_id || "N/A"})</span>
+          <span className="text-xs text-gray-400">
+            (plan_id: {detail.plan_id || "N/A"})
+          </span>
         </div>
         {detail.splits && detail.splits.length > 0 ? (
           <EditableSplitTable
@@ -140,31 +257,59 @@ function LotDetail({ experiment }) {
             onSaved={() => {}}
           />
         ) : (
-          <p className="text-gray-400 text-sm py-4 text-center">등록된 Split 데이터가 없습니다.</p>
+          <p className="text-gray-400 text-sm py-4 text-center">
+            등록된 Split 데이터가 없습니다.
+          </p>
         )}
       </div>
 
-      {/* 실험 Checklist */}
+      {/* 실험 Checklist — 스펙 관리 */}
       <div className="bg-white border border-gray-200 rounded-xl p-4">
         <div className="flex items-center justify-between mb-2">
-          <SectionHeader emoji="✅" title="실험 Checklist" />
-          <button
-            onClick={() => setChecklistRows(prev => [...prev, { no: prev.length + 1, item: "", status: "", owner: "", due: "", note: "" }])}
-            className="text-xs px-2.5 py-1 bg-gray-100 hover:bg-gray-200 text-gray-600 rounded-lg transition">
-            + 행 추가
-          </button>
+          <SectionHeader emoji="✅" title="실험 Checklist" badge="스펙 관리" />
+          <div className="flex gap-1.5">
+            <button
+              onClick={() => {
+                const sel = checklistGridRef.current?.api?.getSelectedNodes();
+                if (sel?.length) {
+                  const updated = checklistRows.filter(
+                    (_, i) => !sel.some((n) => n.rowIndex === i),
+                  );
+                  setChecklistRows(
+                    updated.length ? updated : [{ ...emptyChecklistRow }],
+                  );
+                }
+              }}
+              className="text-xs px-2.5 py-1 bg-red-50 hover:bg-red-100 text-red-500 rounded-lg transition"
+            >
+              − 삭제
+            </button>
+            <button
+              onClick={() =>
+                setChecklistRows((prev) => [...prev, { ...emptyChecklistRow }])
+              }
+              className="text-xs px-2.5 py-1 bg-gray-100 hover:bg-gray-200 text-gray-600 rounded-lg transition"
+            >
+              + 행 추가
+            </button>
+          </div>
         </div>
-        <div style={{ height: Math.min(checklistRows.length * 36 + 40, 240) }}>
+        <div
+          className="ag-theme-alpine rounded-lg overflow-hidden border border-gray-100"
+          style={{ height: Math.min(checklistRows.length * 36 + 42, 320) }}
+        >
           <AgGridReact
+            ref={checklistGridRef}
             rowData={checklistRows}
             columnDefs={checklistColDefs}
-            defaultColDef={{ resizable: true, editable: true, suppressMovable: true }}
+            defaultColDef={{ resizable: true, suppressMovable: true }}
+            rowSelection="multiple"
             headerHeight={36}
             rowHeight={36}
             stopEditingWhenCellsLoseFocus
             onCellValueChanged={(e) => {
               const updated = [];
-              e.api.forEachNode(n => updated.push(n.data));
+              e.api.forEachNode((n) => updated.push(n.data));
               setChecklistRows(updated);
             }}
           />
@@ -215,7 +360,9 @@ function LotDetail({ experiment }) {
             onClick={async () => {
               setSummarySaving(true);
               try {
-                await axios.patch(`/api/experiments/${detail.id}/summary`, { summary_text: summary });
+                await axios.patch(`/api/experiments/${detail.id}/summary`, {
+                  summary_text: summary,
+                });
                 setSummaryCompleted(true);
               } catch (err) {
                 console.error("Summary 저장 실패:", err);
@@ -228,16 +375,23 @@ function LotDetail({ experiment }) {
               summarySaving
                 ? "bg-gray-300 text-gray-500 cursor-wait"
                 : summaryCompleted
-                ? "bg-emerald-500 text-white hover:bg-emerald-600"
-                : "bg-emerald-600 text-white hover:bg-emerald-700 shadow-sm"
+                  ? "bg-emerald-500 text-white hover:bg-emerald-600"
+                  : "bg-emerald-600 text-white hover:bg-emerald-700 shadow-sm"
             }`}
           >
-            {summarySaving ? "저장 중..." : summaryCompleted ? "✅ 완료됨" : "최종 저장"}
+            {summarySaving
+              ? "저장 중..."
+              : summaryCompleted
+                ? "✅ 완료됨"
+                : "최종 저장"}
           </button>
         </div>
         <textarea
           value={summary}
-          onChange={(e) => { setSummary(e.target.value); setSummaryCompleted(false); }}
+          onChange={(e) => {
+            setSummary(e.target.value);
+            setSummaryCompleted(false);
+          }}
           rows={4}
           placeholder="실험 결과 요약 및 결론을 작성하세요..."
           className={textareaCls}
@@ -258,7 +412,12 @@ const expColDefs = [
   { field: "module", headerName: "모듈", width: 100 },
   { field: "wf_direction", headerName: "WF 방향", width: 110 },
   { field: "request_date", headerName: "요청일", width: 120 },
-  { field: "split_count", headerName: "Split수", width: 90, type: "numericColumn" },
+  {
+    field: "split_count",
+    headerName: "Split수",
+    width: 90,
+    type: "numericColumn",
+  },
 ];
 
 const defaultColDef = {
@@ -301,7 +460,9 @@ function ExperimentProgress() {
       return;
     }
     axios
-      .get(`/api/experiments?iacpj_nm=${encodeURIComponent(selectedProject.iacpj_nm)}`)
+      .get(
+        `/api/experiments?iacpj_nm=${encodeURIComponent(selectedProject.iacpj_nm)}`,
+      )
       .then((res) => setExperiments(res.data))
       .catch((err) => console.error("실험 목록 로드 실패:", err));
     setSelectedExperiment(null);
@@ -384,15 +545,31 @@ function ExperimentProgress() {
           className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-gray-200 text-gray-500 transition"
           title="과제 목록으로"
         >
-          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+          <svg
+            className="w-5 h-5"
+            fill="none"
+            stroke="currentColor"
+            viewBox="0 0 24 24"
+          >
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeWidth={2}
+              d="M15 19l-7-7 7-7"
+            />
           </svg>
         </button>
         <div>
-          <h1 className="text-2xl font-bold text-gray-800">{selectedProject.iacpj_nm}</h1>
+          <h1 className="text-2xl font-bold text-gray-800">
+            {selectedProject.iacpj_nm}
+          </h1>
           <div className="flex items-center gap-3 mt-0.5 text-xs text-gray-500">
-            {selectedProject.iacpj_mod_n && <span>모듈: {selectedProject.iacpj_mod_n}</span>}
-            {selectedProject.iacpj_ch_n && <span>PM: {selectedProject.iacpj_ch_n}</span>}
+            {selectedProject.iacpj_mod_n && (
+              <span>모듈: {selectedProject.iacpj_mod_n}</span>
+            )}
+            {selectedProject.iacpj_ch_n && (
+              <span>PM: {selectedProject.iacpj_ch_n}</span>
+            )}
           </div>
         </div>
       </div>

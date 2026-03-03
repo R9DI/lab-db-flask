@@ -11,6 +11,7 @@ import LLMNewExperiment from "./pages/LLMNewExperiment";
 import HomePage from "./pages/HomePage";
 import DBAnalysis from "./pages/DBAnalysis";
 import AgentDemo from "./pages/AgentDemo";
+import AIExperimentProgress from "./pages/AIExperimentProgress";
 
 const dbSubPages = [
   { to: "/", label: "통합 DB Board", end: true },
@@ -30,7 +31,14 @@ const planSubPages = [
 const mainNavItems = [
   { key: "db", label: "실험 DB", sub: dbSubPages },
   { key: "plan", label: "실험 계획", sub: planSubPages },
-  { key: "progress", to: "/progress", label: "실험 관리" },
+  {
+    key: "progress",
+    label: "실험 관리",
+    sub: [
+      { to: "/progress", label: "실험 관리" },
+      { to: "/ai-progress", label: "실험 관리(w AI_Ex)" },
+    ],
+  },
 ];
 
 function DropdownNav({ item, linkClass }) {
@@ -138,6 +146,7 @@ function App() {
           <Route path="/progress" element={<ExperimentProgress />} />
           <Route path="/db-analysis" element={<DBAnalysis />} />
           <Route path="/agent-demo" element={<AgentDemo />} />
+          <Route path="/ai-progress" element={<AIExperimentProgress />} />
         </Routes>
       </main>
     </div>
