@@ -2,7 +2,9 @@ import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 
 export default defineConfig({
-  base: "/static/",
+  // use root in development so hard refresh and direct links work
+  // production build will still use /static/ where Flask serves files
+  base: process.env.NODE_ENV === "production" ? "/static/" : "/",
   plugins: [react()],
   server: {
     port: 5174,
