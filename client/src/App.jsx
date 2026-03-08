@@ -12,6 +12,7 @@ import HomePage from "./pages/HomePage";
 import DBAnalysis from "./pages/DBAnalysis";
 import AgentDemo from "./pages/AgentDemo";
 import AIExperimentProgress from "./pages/AIExperimentProgress";
+import AILotAssign from "./pages/AILotAssign";
 
 const dbSubPages = [
   { to: "/", label: "통합 DB Board", end: true },
@@ -26,6 +27,7 @@ const planSubPages = [
   { to: "/llm-new-experiment", label: "신규 실험(w AI)" },
   { to: "/agent-demo", label: "신규실험 (w AI_Ex)" },
   { to: "/lot-assign", label: "Lot Assign" },
+  { to: "/ai-lot-assign", label: "Lot Assign(w AI)" },
 ];
 
 const mainNavItems = [
@@ -147,6 +149,7 @@ function App() {
           <Route path="/db-analysis" element={<DBAnalysis />} />
           <Route path="/agent-demo" element={<AgentDemo />} />
           <Route path="/ai-progress" element={<AIExperimentProgress />} />
+          <Route path="/ai-lot-assign" element={<AILotAssign />} />
         </Routes>
       </main>
     </div>
