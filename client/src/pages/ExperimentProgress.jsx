@@ -324,7 +324,7 @@ function ModuleManagerPanel({ config, onClose, onChange }) {
           {config.map((m, idx) => (
             <div
               key={m.id}
-              className={`flex items-center gap-2 rounded-lg px-3 py-2.5 group transition ${
+              className={`flex items-center gap-2 rounded-lg px-3 py-2.5 group transition min-h-[52px] ${
                 m.enabled ? "bg-gray-50" : "bg-gray-50/40 opacity-60"
               }`}
             >

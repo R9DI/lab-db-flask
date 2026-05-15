@@ -13,6 +13,7 @@ import DBAnalysis from "./pages/DBAnalysis";
 import AgentDemo from "./pages/AgentDemo";
 import AIExperimentProgress from "./pages/AIExperimentProgress";
 import AILotAssign from "./pages/AILotAssign";
+import ExperimentHub from "./pages/ExperimentHub";
 
 const dbSubPages = [
   { to: "/", label: "통합 DB Board", end: true },
@@ -39,6 +40,7 @@ const mainNavItems = [
     sub: [
       { to: "/progress", label: "실험 관리" },
       { to: "/ai-progress", label: "실험 관리(w AI_Ex)" },
+      { to: "/experiment-hub", label: "실험 허브 (New)" },
     ],
   },
 ];
@@ -150,6 +152,7 @@ function App() {
           <Route path="/agent-demo" element={<AgentDemo />} />
           <Route path="/ai-progress" element={<AIExperimentProgress />} />
           <Route path="/ai-lot-assign" element={<AILotAssign />} />
+          <Route path="/experiment-hub" element={<ExperimentHub />} />
         </Routes>
       </main>
     </div>
