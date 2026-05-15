@@ -89,26 +89,34 @@ function ToolPanel() {
   const [queryInput, setQueryInput] = useState("");
   const [executing, setExecuting] = useState(null);
   const [execResult, setExecResult] = useState(null);
+  const [token, setToken] = useState(() => localStorage.getItem("enablelab_token") || "");
 
-  useEffect(() => {
+  const authHeaders = token ? { Authorization: `Bearer ${token}` } : {};
+
+  const saveToken = (v) => { setToken(v); localStorage.setItem("enablelab_token", v); };
+
+  const fetchTools = () => {
     setLoading(true);
-    axios.post("/api/enablelab/tools/list", { personal_id: PERSONAL_ID })
+    setError(null);
+    axios.post("/api/enablelab/tools/list", { personal_id: PERSONAL_ID }, { headers: authHeaders })
       .then(res => {
         const data = res.data;
         if (data.success && data.tool_list) setTools(data.tool_list);
-        else setError("툴 목록을 불러오지 못했습니다.");
+        else setError("툴 목록을 불러오지 못했습니다. " + (data.error || data.raw || ""));
       })
-      .catch(err => setError(`API 호출 실패: ${err.message}`))
+      .catch(err => setError(`API 호출 실패: ${err.response?.status || ""} ${err.message}`))
       .finally(() => setLoading(false));
-  }, []);
+  };
+
+  useEffect(() => { fetchTools(); }, [token]);
 
   const handleExecute = (toolName) => {
     if (!queryInput.trim()) { alert("쿼리를 입력하세요"); return; }
     setExecuting(toolName);
     setExecResult(null);
-    axios.post("/api/enablelab/tools/plan", { personal_id: PERSONAL_ID, query: queryInput.trim() })
+    axios.post("/api/enablelab/tools/plan", { personal_id: PERSONAL_ID, query: queryInput.trim() }, { headers: authHeaders })
       .then(res => setExecResult({ tool: toolName, data: res.data }))
-      .catch(err => setExecResult({ tool: toolName, error: err.message }))
+      .catch(err => setExecResult({ tool: toolName, error: `${err.response?.status || ""} ${err.message}` }))
       .finally(() => setExecuting(null));
   };
 
@@ -116,14 +124,23 @@ function ToolPanel() {
 
   return (
     <div className="bg-white border border-indigo-100 rounded-xl p-5">
-      <div className="flex items-center justify-between mb-4">
+      <div className="flex items-center justify-between mb-3">
         <div className="flex items-center gap-2">
           <span className="text-lg">🔧</span>
           <h4 className="text-sm font-bold text-gray-700">Enable Lab 툴</h4>
           <span className="text-[10px] px-1.5 py-0.5 bg-indigo-50 text-indigo-600 rounded">실제 API 연동</span>
           <span className="text-[10px] px-1.5 py-0.5 bg-gray-100 text-gray-400 rounded">ID: {PERSONAL_ID}</span>
+          {token && <span className="text-[10px] px-1.5 py-0.5 bg-emerald-50 text-emerald-600 rounded">🔑 인증됨</span>}
         </div>
         <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="툴 검색..." className="text-xs px-3 py-1.5 border border-gray-200 rounded-lg w-40 focus:outline-none focus:ring-2 focus:ring-indigo-200" />
+      </div>
+      {/* 토큰 입력 */}
+      <div className="flex items-center gap-2 mb-4 p-2.5 bg-gray-50 rounded-lg border border-gray-100">
+        <span className="text-xs text-gray-500 shrink-0">🔑 Token:</span>
+        <input type="password" value={token} onChange={e=>saveToken(e.target.value)} placeholder="Enable Lab API 토큰 입력..."
+          className="flex-1 text-xs px-2.5 py-1.5 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-200 bg-white" />
+        {token && <button onClick={()=>saveToken("")} className="text-[10px] text-gray-400 hover:text-red-500 shrink-0">초기화</button>}
+        <button onClick={fetchTools} className="text-xs px-3 py-1.5 bg-indigo-100 text-indigo-600 rounded-lg hover:bg-indigo-200 transition font-medium shrink-0">재시도</button>
       </div>
 
       {loading && <div className="text-center py-6 text-gray-400 text-sm"><div className="inline-block w-5 h-5 border-2 border-indigo-300 border-t-transparent rounded-full animate-spin mr-2" />Enable Lab에서 툴 목록 로딩 중...</div>}

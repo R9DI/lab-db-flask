@@ -15,13 +15,24 @@ HEADERS = {
 }
 
 
+def _build_headers():
+    """프론트에서 전달받은 Authorization 헤더를 포함한 헤더 생성"""
+    h = dict(HEADERS)
+    auth = request.headers.get("Authorization")
+    if auth:
+        h["Authorization"] = auth
+    return h
+
+
 def _proxy_post(path, body):
     """Enable Lab API POST 프록시 (디버깅 로그 포함)"""
     url = f"{ENABLE_LAB_BASE}{path}"
+    h = _build_headers()
     print(f"[EnableLab] POST {url}")
     print(f"[EnableLab] Body: {body}")
+    print(f"[EnableLab] Auth: {'있음' if 'Authorization' in h else '없음'}")
     try:
-        resp = http_requests.post(url, json=body, headers=HEADERS, timeout=TIMEOUT)
+        resp = http_requests.post(url, json=body, headers=h, timeout=TIMEOUT)
         print(f"[EnableLab] Status: {resp.status_code}")
         print(f"[EnableLab] Response: {resp.text[:500]}")
         try:
