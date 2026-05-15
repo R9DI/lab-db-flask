@@ -111,10 +111,10 @@ function ToolPanel() {
   useEffect(() => { fetchTools(); }, [token]);
 
   const handleExecute = (toolName) => {
-    if (!queryInput.trim()) { alert("쿼리를 입력하세요"); return; }
+    const q = queryInput.trim() || `${toolName} 실행해줘`;
     setExecuting(toolName);
     setExecResult(null);
-    axios.post("/api/enablelab/tools/plan", { personal_id: PERSONAL_ID, query: queryInput.trim() }, { headers: authHeaders })
+    axios.post("/api/enablelab/tools/plan", { personal_id: PERSONAL_ID, query: q }, { headers: authHeaders })
       .then(res => setExecResult({ tool: toolName, data: res.data }))
       .catch(err => setExecResult({ tool: toolName, error: `${err.response?.status || ""} ${err.message}` }))
       .finally(() => setExecuting(null));
