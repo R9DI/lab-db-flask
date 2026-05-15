@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useRef, useCallback } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import axios from "axios";
 import { AgGridReact } from "ag-grid-react";
 import { AllCommunityModule, ModuleRegistry } from "ag-grid-community";
@@ -38,14 +38,7 @@ const expColDefs = [
   { field:"split_count", headerName:"Split수", width:90, type:"numericColumn" },
 ];
 
-/* ─── 데모 Enable Lab 툴 ─── */
-const DEMO_TOOLS = [
-  { id:"tool_cd_trend", name:"CD Trend Viewer", author:"김민수", icon:"📈", desc:"Split별 CD 트렌드를 시각화합니다", category:"Inline", shared:true, installed:true },
-  { id:"tool_depth_map", name:"Depth Heatmap", author:"이지은", icon:"🗺️", desc:"웨이퍼별 Depth 분포를 히트맵으로 표시", category:"Inline", shared:true, installed:true },
-  { id:"tool_profile_3d", name:"3D Profile Viewer", author:"박준혁", icon:"🧊", desc:"Etch Profile을 3D로 렌더링", category:"EPM", shared:true, installed:false },
-  { id:"tool_selectivity", name:"Selectivity Calculator", author:"최유리", icon:"⚗️", desc:"Layer별 식각 선택비 자동 계산", category:"Inline", shared:true, installed:false },
-  { id:"tool_particle", name:"Particle Map", author:"김민수", icon:"🔬", desc:"웨이퍼 파티클 분포 맵", category:"WT", shared:false, installed:false },
-];
+const PERSONAL_ID = "2066140";
 
 /* ─── 파일 첨부 영역 ─── */
 function AttachmentSection({ files, onAdd, onRemove }) {
@@ -87,18 +80,39 @@ function AttachmentSection({ files, onAdd, onRemove }) {
   );
 }
 
-/* ─── Enable Lab 툴 패널 ─── */
-function ToolPanel({ tools, onToggleInstall }) {
-  const [filter, setFilter] = useState("all");
+/* ─── Enable Lab 툴 패널 (실제 API 연동) ─── */
+function ToolPanel() {
+  const [tools, setTools] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
   const [search, setSearch] = useState("");
-  const categories = ["all", ...new Set(tools.map(t=>t.category))];
-  const filtered = tools.filter(t => {
-    if (filter !== "all" && t.category !== filter) return false;
-    if (search && !t.name.toLowerCase().includes(search.toLowerCase()) && !t.desc.toLowerCase().includes(search.toLowerCase())) return false;
-    return true;
-  });
-  const installed = filtered.filter(t=>t.installed);
-  const available = filtered.filter(t=>!t.installed);
+  const [queryInput, setQueryInput] = useState("");
+  const [executing, setExecuting] = useState(null);
+  const [execResult, setExecResult] = useState(null);
+
+  useEffect(() => {
+    setLoading(true);
+    axios.post("/api/enablelab/tools/list", { personal_id: PERSONAL_ID })
+      .then(res => {
+        const data = res.data;
+        if (data.success && data.tool_list) setTools(data.tool_list);
+        else setError("툴 목록을 불러오지 못했습니다.");
+      })
+      .catch(err => setError(`API 호출 실패: ${err.message}`))
+      .finally(() => setLoading(false));
+  }, []);
+
+  const handleExecute = (toolName) => {
+    if (!queryInput.trim()) { alert("쿼리를 입력하세요"); return; }
+    setExecuting(toolName);
+    setExecResult(null);
+    axios.post("/api/enablelab/tools/plan", { personal_id: PERSONAL_ID, query: queryInput.trim() })
+      .then(res => setExecResult({ tool: toolName, data: res.data }))
+      .catch(err => setExecResult({ tool: toolName, error: err.message }))
+      .finally(() => setExecuting(null));
+  };
+
+  const filtered = tools.filter(t => !search || t.tool_name?.toLowerCase().includes(search.toLowerCase()));
 
   return (
     <div className="bg-white border border-indigo-100 rounded-xl p-5">
@@ -106,70 +120,59 @@ function ToolPanel({ tools, onToggleInstall }) {
         <div className="flex items-center gap-2">
           <span className="text-lg">🔧</span>
           <h4 className="text-sm font-bold text-gray-700">Enable Lab 툴</h4>
-          <span className="text-[10px] px-1.5 py-0.5 bg-indigo-50 text-indigo-600 rounded">데이터 시각화</span>
+          <span className="text-[10px] px-1.5 py-0.5 bg-indigo-50 text-indigo-600 rounded">실제 API 연동</span>
+          <span className="text-[10px] px-1.5 py-0.5 bg-gray-100 text-gray-400 rounded">ID: {PERSONAL_ID}</span>
         </div>
-        <div className="flex items-center gap-2">
-          <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="툴 검색..." className="text-xs px-3 py-1.5 border border-gray-200 rounded-lg w-40 focus:outline-none focus:ring-2 focus:ring-indigo-200" />
-          <a href="#" className="text-xs text-indigo-500 hover:text-indigo-700 font-medium">Enable Lab →</a>
-        </div>
+        <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="툴 검색..." className="text-xs px-3 py-1.5 border border-gray-200 rounded-lg w-40 focus:outline-none focus:ring-2 focus:ring-indigo-200" />
       </div>
 
-      {/* 카테고리 필터 */}
-      <div className="flex gap-1.5 mb-4">
-        {categories.map(c => (
-          <button key={c} onClick={()=>setFilter(c)} className={`text-[11px] px-2.5 py-1 rounded-full transition font-medium ${filter===c?"bg-indigo-600 text-white":"bg-gray-100 text-gray-500 hover:bg-gray-200"}`}>
-            {c === "all" ? "전체" : c}
-          </button>
-        ))}
-      </div>
+      {loading && <div className="text-center py-6 text-gray-400 text-sm"><div className="inline-block w-5 h-5 border-2 border-indigo-300 border-t-transparent rounded-full animate-spin mr-2" />Enable Lab에서 툴 목록 로딩 중...</div>}
+      {error && <div className="text-center py-6"><p className="text-red-500 text-sm">{error}</p><p className="text-[10px] text-gray-400 mt-1">사내망에서만 접속 가능합니다</p></div>}
 
-      {/* 설치된 툴 */}
-      {installed.length > 0 && (
-        <div className="mb-4">
-          <p className="text-[11px] text-gray-400 font-semibold mb-2 uppercase tracking-wider">사용 중 ({installed.length})</p>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-            {installed.map(tool => (
-              <div key={tool.id} className="flex items-start gap-3 p-3 bg-indigo-50/50 border border-indigo-100 rounded-xl hover:shadow-sm transition group">
-                <span className="text-2xl mt-0.5">{tool.icon}</span>
+      {!loading && !error && (
+        <>
+          <p className="text-[11px] text-gray-400 font-semibold mb-2 uppercase tracking-wider">사용 가능한 툴 ({filtered.length})</p>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-2 mb-4">
+            {filtered.map((tool, i) => (
+              <div key={tool.tool_name || i} className="flex items-start gap-3 p-3 bg-gray-50 border border-gray-100 rounded-xl hover:border-indigo-200 hover:shadow-sm transition">
+                <span className="text-2xl mt-0.5">🛠️</span>
                 <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-1.5">
-                    <p className="text-sm font-semibold text-gray-800">{tool.name}</p>
-                    {tool.shared && <span className="text-[9px] px-1.5 py-0.5 bg-emerald-100 text-emerald-600 rounded">공유</span>}
-                  </div>
-                  <p className="text-[11px] text-gray-500 mt-0.5 truncate">{tool.desc}</p>
-                  <p className="text-[10px] text-gray-400 mt-1">by {tool.author}</p>
+                  <p className="text-sm font-semibold text-gray-800">{tool.tool_name}</p>
+                  {tool.tool_parameter && <p className="text-[10px] text-gray-400 mt-0.5 truncate">params: {JSON.stringify(tool.tool_parameter)}</p>}
                 </div>
-                <div className="flex flex-col items-end gap-1 shrink-0">
-                  <button className="text-xs px-3 py-1 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition font-medium">실행</button>
-                  <button onClick={()=>onToggleInstall(tool.id)} className="text-[10px] text-gray-400 hover:text-red-500 transition opacity-0 group-hover:opacity-100">제거</button>
-                </div>
+                <button onClick={()=>handleExecute(tool.tool_name)} disabled={executing===tool.tool_name}
+                  className={`text-xs px-3 py-1 rounded-lg transition font-medium shrink-0 mt-1 ${executing===tool.tool_name?"bg-gray-300 text-gray-500 cursor-wait":"bg-indigo-600 text-white hover:bg-indigo-700"}`}>
+                  {executing===tool.tool_name?"실행 중...":"실행"}
+                </button>
               </div>
             ))}
+            {filtered.length===0 && <p className="text-gray-400 text-xs col-span-2 text-center py-4">등록된 툴이 없습니다.</p>}
           </div>
-        </div>
-      )}
 
-      {/* 설치 가능한 툴 */}
-      {available.length > 0 && (
-        <div>
-          <p className="text-[11px] text-gray-400 font-semibold mb-2 uppercase tracking-wider">사용 가능한 툴 ({available.length})</p>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-            {available.map(tool => (
-              <div key={tool.id} className="flex items-start gap-3 p-3 bg-gray-50 border border-gray-100 rounded-xl hover:border-indigo-200 hover:shadow-sm transition">
-                <span className="text-2xl mt-0.5 opacity-60">{tool.icon}</span>
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-1.5">
-                    <p className="text-sm font-medium text-gray-600">{tool.name}</p>
-                    {tool.shared && <span className="text-[9px] px-1.5 py-0.5 bg-emerald-100 text-emerald-600 rounded">공유</span>}
-                  </div>
-                  <p className="text-[11px] text-gray-400 mt-0.5 truncate">{tool.desc}</p>
-                  <p className="text-[10px] text-gray-400 mt-1">by {tool.author}</p>
-                </div>
-                <button onClick={()=>onToggleInstall(tool.id)} className="text-xs px-3 py-1 bg-white border border-indigo-300 text-indigo-600 rounded-lg hover:bg-indigo-50 transition font-medium shrink-0 mt-1">+ 추가</button>
-              </div>
-            ))}
+          {/* 쿼리 입력 */}
+          <div className="border-t border-gray-100 pt-4">
+            <p className="text-[11px] text-gray-500 font-semibold mb-2">🚀 툴 실행 쿼리</p>
+            <div className="flex gap-2">
+              <input value={queryInput} onChange={e=>setQueryInput(e.target.value)} placeholder="예: 랏 아이디 리스트를 알려줘"
+                className="flex-1 text-sm px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-200"
+                onKeyDown={e=>{if(e.key==="Enter"&&filtered.length>0) handleExecute(filtered[0].tool_name);}} />
+              <button onClick={()=>{if(filtered.length>0) handleExecute(filtered[0].tool_name);}} disabled={!queryInput.trim()||executing}
+                className="px-4 py-2 bg-indigo-600 text-white text-sm rounded-lg hover:bg-indigo-700 transition font-medium disabled:opacity-40">실행</button>
+            </div>
           </div>
-        </div>
+
+          {/* 실행 결과 */}
+          {execResult && (
+            <div className="mt-4 border border-gray-200 rounded-xl overflow-hidden">
+              <div className={`px-4 py-2 text-xs font-semibold ${execResult.error?"bg-red-50 text-red-600":"bg-emerald-50 text-emerald-700"}`}>
+                {execResult.error ? `❌ 실행 실패: ${execResult.error}` : `✅ ${execResult.tool} 실행 완료`}
+              </div>
+              {execResult.data && (
+                <pre className="px-4 py-3 text-xs text-gray-700 bg-gray-50 overflow-x-auto max-h-64 overflow-y-auto whitespace-pre-wrap">{JSON.stringify(execResult.data, null, 2)}</pre>
+              )}
+            </div>
+          )}
+        </>
       )}
     </div>
   );
@@ -181,7 +184,7 @@ function ExperimentDetail({ experiment }) {
   const [loading, setLoading] = useState(true);
   const [checklistRows, setChecklistRows] = useState([{...emptyChecklistRow}]);
   const [attachedFiles, setAttachedFiles] = useState([]);
-  const [tools, setTools] = useState(DEMO_TOOLS.map(t=>({...t})));
+
   const checklistGridRef = useRef(null);
 
   useEffect(() => {
@@ -195,9 +198,7 @@ function ExperimentDetail({ experiment }) {
       .finally(() => setLoading(false));
   }, [experiment]);
 
-  const handleToggleInstall = (toolId) => {
-    setTools(prev => prev.map(t => t.id === toolId ? {...t, installed: !t.installed} : t));
-  };
+
 
   if (loading) return <div className="text-center text-gray-400 py-8">로딩 중...</div>;
   if (!detail) return null;
@@ -248,7 +249,7 @@ function ExperimentDetail({ experiment }) {
       <AttachmentSection files={attachedFiles} onAdd={newFiles=>setAttachedFiles(prev=>[...prev,...newFiles])} onRemove={idx=>setAttachedFiles(prev=>prev.filter((_,i)=>i!==idx))} />
 
       {/* 4. Enable Lab 툴 */}
-      <ToolPanel tools={tools} onToggleInstall={handleToggleInstall} />
+      <ToolPanel />
     </div>
   );
 }

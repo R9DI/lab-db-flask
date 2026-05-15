@@ -6,7 +6,7 @@ from flask import Flask
 from flask_cors import CORS
 
 from .database import init_db, seed_data, close_db
-from .routes import projects, experiments, splits, search, upload, llm_search, line_lots, analysis
+from .routes import projects, experiments, splits, search, upload, llm_search, line_lots, analysis, enablelab
 
 # ── App ──
 app = Flask(__name__)
@@ -33,6 +33,7 @@ app.register_blueprint(upload.bp)
 app.register_blueprint(llm_search.bp)
 app.register_blueprint(line_lots.bp)
 app.register_blueprint(analysis.bp)
+app.register_blueprint(enablelab.bp)
 
 
 if __name__ == "__main__":
