@@ -71,6 +71,13 @@ def tool_list():
 
 @bp.route("/api/enablelab/tools/plan", methods=["POST"])
 def tool_plan():
-    """POST /api/tools/plan → 툴 실행"""
+    """POST /api/tools/plan → 툴 실행 계획"""
     body = request.get_json(force=True, silent=True) or {}
     return _proxy_post("/api/tools/plan", body)
+
+
+@bp.route("/api/enablelab/tools/execute", methods=["POST"])
+def tool_execute():
+    """POST /api/tools/execute → 툴 직접 실행"""
+    body = request.get_json(force=True, silent=True) or {}
+    return _proxy_post("/api/tools/execute", body)

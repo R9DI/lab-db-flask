@@ -110,17 +110,28 @@ function ToolPanel() {
 
   useEffect(() => { fetchTools(); }, [token]);
 
-  const handleExecute = (toolName) => {
-    const q = queryInput.trim() || `${toolName} 실행해줘`;
+  const handleExecute = (toolName, query) => {
+    if (!query?.trim()) return;
     setExecuting(toolName);
     setExecResult(null);
-    axios.post("/api/enablelab/tools/plan", { personal_id: PERSONAL_ID, query: q }, { headers: authHeaders })
-      .then(res => setExecResult({ tool: toolName, data: res.data }))
-      .catch(err => setExecResult({ tool: toolName, error: `${err.response?.status || ""} ${err.message}` }))
+    axios.post("/api/enablelab/tools/execute", { personal_id: PERSONAL_ID, tool_name: toolName, query: query.trim() }, { headers: authHeaders })
+      .then(res => setExecResult({ tool: toolName, type: "execute", data: res.data }))
+      .catch(err => setExecResult({ tool: toolName, type: "execute", error: `${err.response?.status || ""} ${err.message}` }))
+      .finally(() => setExecuting(null));
+  };
+
+  const handlePlan = () => {
+    if (!queryInput.trim()) return;
+    setExecuting("plan");
+    setExecResult(null);
+    axios.post("/api/enablelab/tools/plan", { personal_id: PERSONAL_ID, query: queryInput.trim() }, { headers: authHeaders })
+      .then(res => setExecResult({ tool: "Plan", type: "plan", data: res.data }))
+      .catch(err => setExecResult({ tool: "Plan", type: "plan", error: `${err.response?.status || ""} ${err.message}` }))
       .finally(() => setExecuting(null));
   };
 
   const filtered = tools.filter(t => !search || t.tool_name?.toLowerCase().includes(search.toLowerCase()));
+  const [activeToolQuery, setActiveToolQuery] = useState(null);
 
   return (
     <div className="bg-white border border-indigo-100 rounded-xl p-5">
@@ -149,32 +160,42 @@ function ToolPanel() {
       {!loading && !error && (
         <>
           <p className="text-[11px] text-gray-400 font-semibold mb-2 uppercase tracking-wider">사용 가능한 툴 ({filtered.length})</p>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-2 mb-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-2 mb-4 max-h-[480px] overflow-y-auto pr-1">
             {filtered.map((tool, i) => (
-              <div key={tool.tool_name || i} className="flex items-start gap-3 p-3 bg-gray-50 border border-gray-100 rounded-xl hover:border-indigo-200 hover:shadow-sm transition">
-                <span className="text-2xl mt-0.5">🛠️</span>
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-semibold text-gray-800">{tool.tool_name}</p>
-                  {tool.tool_parameter && <p className="text-[10px] text-gray-400 mt-0.5 truncate">params: {JSON.stringify(tool.tool_parameter)}</p>}
+              <div key={tool.tool_name || i} className="p-3 bg-gray-50 border border-gray-100 rounded-xl hover:border-indigo-200 hover:shadow-sm transition">
+                <div className="flex items-start gap-3">
+                  <span className="text-2xl mt-0.5">🛠️</span>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-semibold text-gray-800">{tool.tool_name}</p>
+                    {tool.tool_parameter && <p className="text-[10px] text-gray-400 mt-0.5 truncate">params: {JSON.stringify(tool.tool_parameter)}</p>}
+                  </div>
+                  <button onClick={()=>setActiveToolQuery(activeToolQuery===tool.tool_name ? null : tool.tool_name)} disabled={executing===tool.tool_name}
+                    className={`text-xs px-3 py-1 rounded-lg transition font-medium shrink-0 mt-1 ${executing===tool.tool_name?"bg-gray-300 text-gray-500 cursor-wait":activeToolQuery===tool.tool_name?"bg-red-100 text-red-600 hover:bg-red-200":"bg-indigo-600 text-white hover:bg-indigo-700"}`}>
+                    {executing===tool.tool_name?"실행 중...":activeToolQuery===tool.tool_name?"취소":"실행"}
+                  </button>
                 </div>
-                <button onClick={()=>handleExecute(tool.tool_name)} disabled={executing===tool.tool_name}
-                  className={`text-xs px-3 py-1 rounded-lg transition font-medium shrink-0 mt-1 ${executing===tool.tool_name?"bg-gray-300 text-gray-500 cursor-wait":"bg-indigo-600 text-white hover:bg-indigo-700"}`}>
-                  {executing===tool.tool_name?"실행 중...":"실행"}
-                </button>
+                {activeToolQuery===tool.tool_name && (
+                  <div className="flex gap-2 mt-2 ml-9">
+                    <input autoFocus placeholder="쿼리 입력..." className="flex-1 text-xs px-2.5 py-1.5 border border-indigo-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-300 bg-white"
+                      onKeyDown={e=>{if(e.key==="Enter") { handleExecute(tool.tool_name, e.target.value); setActiveToolQuery(null); }}} id={`tool-q-${i}`} />
+                    <button onClick={()=>{ const el=document.getElementById(`tool-q-${i}`); if(el?.value) { handleExecute(tool.tool_name, el.value); setActiveToolQuery(null); }}}
+                      className="text-xs px-3 py-1.5 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition font-medium">전송</button>
+                  </div>
+                )}
               </div>
             ))}
             {filtered.length===0 && <p className="text-gray-400 text-xs col-span-2 text-center py-4">등록된 툴이 없습니다.</p>}
           </div>
 
-          {/* 쿼리 입력 */}
+          {/* Plan 쿼리 입력 */}
           <div className="border-t border-gray-100 pt-4">
-            <p className="text-[11px] text-gray-500 font-semibold mb-2">🚀 툴 실행 쿼리</p>
+            <p className="text-[11px] text-gray-500 font-semibold mb-2">🚀 Plan (자연어 쿼리)</p>
             <div className="flex gap-2">
               <input value={queryInput} onChange={e=>setQueryInput(e.target.value)} placeholder="예: 랏 아이디 리스트를 알려줘"
                 className="flex-1 text-sm px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-200"
-                onKeyDown={e=>{if(e.key==="Enter"&&filtered.length>0) handleExecute(filtered[0].tool_name);}} />
-              <button onClick={()=>{if(filtered.length>0) handleExecute(filtered[0].tool_name);}} disabled={!queryInput.trim()||executing}
-                className="px-4 py-2 bg-indigo-600 text-white text-sm rounded-lg hover:bg-indigo-700 transition font-medium disabled:opacity-40">실행</button>
+                onKeyDown={e=>{if(e.key==="Enter") handlePlan();}} />
+              <button onClick={handlePlan} disabled={!queryInput.trim()||executing}
+                className="px-4 py-2 bg-indigo-600 text-white text-sm rounded-lg hover:bg-indigo-700 transition font-medium disabled:opacity-40">Plan 실행</button>
             </div>
           </div>
 
